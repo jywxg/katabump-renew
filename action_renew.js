@@ -1,11 +1,11 @@
 const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 const axios = require('axios');
-const { SocksProxyAgent } = require('socks-proxy-agent');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
@@ -65,7 +65,7 @@ if (GOST_PROXY) {
         };
         console.log(`[代理] 检测到配置: 服务器=${PROXY_CONFIG.server}, 认证=${PROXY_CONFIG.username ? '是' : '否'}`);
     } catch (e) {
-        console.error('[代理] GOST_PROXY 格式无效。');
+        console.error('[代理] GOST_PROXY(SOCKS5) 格式无效。');
         process.exit(1);
     }
 }
@@ -121,9 +121,10 @@ async function checkProxy() {
     if (!PROXY_CONFIG) return true;
     console.log('[代理] 正在验证代理连接...');
     try {
+        const agent = new SocksProxyAgent(GOST_PROXY);
         const axiosConfig = {
-            proxy: {
-                protocol: 'http',
+            httpAgent: agent,
+            httpsAgent: agent,
                 host: new URL(PROXY_CONFIG.server).hostname,
                 port: parseInt(new URL(PROXY_CONFIG.server).port, 10),
             },
