@@ -30,13 +30,7 @@ jobs:
           UPSTREAM_SOCKS5: ${{ secrets.GOST_PROXY }}
         run: |
           GOST_VERSION=$(curl -s https://api.github.com/repos/go-gost/gost/releases/latest | grep tag_name | cut -d '"' -f4)
-
-wget \
-"https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION#v}_linux_amd64.tar.gz" \
--O gost.tar.gz
-
-tar -xzf gost.tar.gz
-chmod +x gost
+wget -q "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION#v}_linux_amd64.tar.gz" -O gost.tar.gz
           tar -xzf gost.tar.gz
           chmod +x gost
           nohup ./gost -L "socks5://runner:runner@127.0.0.1:1080" -F "$UPSTREAM_SOCKS5" > gost.log 2>&1 &
