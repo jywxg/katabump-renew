@@ -24,19 +24,6 @@ jobs:
         with:
           node-version: '20'
 
-
-      - name: Start GOST SOCKS5 Forward
-        env:
-          UPSTREAM_SOCKS5: ${{ secrets.GOST_PROXY }}
-        run: |
-          GOST_VERSION=$(curl -s https://api.github.com/repos/go-gost/gost/releases/latest | grep tag_name | cut -d '"' -f4)
-wget -q "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_${GOST_VERSION#v}_linux_amd64.tar.gz" -O gost.tar.gz
-          tar -xzf gost.tar.gz
-          chmod +x gost
-          nohup ./gost -L "socks5://runner:runner@127.0.0.1:1080" -F "$UPSTREAM_SOCKS5" > gost.log 2>&1 &
-          sleep 5
-          ss -lntp | grep 1080 || true
-
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -47,7 +34,7 @@ wget -q "https://github.com/go-gost/gost/releases/download/${GOST_VERSION}/gost_
       - name: Run Renew Script
         env:
           USERS_JSON: ${{ secrets.USERS_JSON }}
-          GOST_PROXY: socks5://runner:runner@127.0.0.1:1080
+          HTTP_PROXY: ${{ secrets.HTTP_PROXY }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" node action_renew.js
