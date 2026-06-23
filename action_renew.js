@@ -52,12 +52,12 @@ const VIEWPORT_HEIGHT = 720;
 const RENEW_MAX_ATTEMPTS = 3;
 process.env.NO_PROXY = 'localhost,127.0.0.1';
 
-const PROXY_URL = process.env.HTTP_PROXY || process.env.SOCKS5_PROXY || process.env.PROXY_URL;
+const SOCKS5_PROXY = process.env.SOCKS5_PROXY;
 let PROXY_CONFIG = null;
 
-if (PROXY_URL) {
+if (SOCKS5_PROXY) {
     try {
-        const proxyUrl = new URL(PROXY_URL);
+        const proxyUrl = new URL(SOCKS5_PROXY);
         PROXY_CONFIG = {
             server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
             username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
@@ -65,7 +65,7 @@ if (PROXY_URL) {
         };
         console.log(`[代理] 检测到配置: 服务器=${PROXY_CONFIG.server}, 认证=${PROXY_CONFIG.username ? '是' : '否'}`);
     } catch (e) {
-        console.error('[代理] HTTP_PROXY 格式无效。');
+        console.error('[代理] SOCKS5_PROXY 格式无效。');
         process.exit(1);
     }
 }
@@ -121,29 +121,13 @@ async function checkProxy() {
     if (!PROXY_CONFIG) return true;
     console.log('[代理] 正在验证代理连接...');
     try {
-        if (PROXY_CONFIG.server.startsWith('socks')) {
-            const agent = new SocksProxyAgent(PROXY_URL);
-            await axios.get('https://api.ip.sb/ip', {
-                httpsAgent: agent,
-                timeout: 15000
-            });
-        } else {
-            const axiosConfig = {
-                proxy: {
-                    protocol: 'http',
-                    host: new URL(PROXY_CONFIG.server).hostname,
-                    port: parseInt(new URL(PROXY_CONFIG.server).port, 10),
-                },
-                timeout: 15000
-            };
-            if (PROXY_CONFIG.username && PROXY_CONFIG.password) {
-                axiosConfig.proxy.auth = {
-                    username: PROXY_CONFIG.username,
-                    password: PROXY_CONFIG.password
-                };
-            }
-            await axios.get('https://api.ip.sb/ip', axiosConfig);
-        }
+        const agent = new SocksProxyAgent(SOCKS5_PROXY);
+        await axios.get('https://1.1.1.1', {
+            httpAgent: agent,
+            httpsAgent: agent,
+            proxy: false,
+            timeout: 10000
+        });
         console.log('[代理] 连接成功！');
         return true;
     } catch (error) {
@@ -184,9 +168,19 @@ async function launchChrome() {
         '--user-data-dir=/tmp/chrome_user_data',
         '--disable-dev-shm-usage'
     ];
-    if (PROXY_CONFIG) {
-        args.push(`--proxy-server=${PROXY_CONFIG.server}`);
+    if (process.env.SOCKS5_PROXY) {
+        const proxyUrl = new URL(process.env.SOCKS5_PROXY);
+        const proxyServer = `${proxyUrl.protocol.replace(':','')}://${proxyUrl.hostname}:${proxyUrl.port}`;
+
+        args.push(`--proxy-server=${proxyServer}`);
         args.push('--proxy-bypass-list=<-loopback>');
+
+        console.log(`[Chrome] Using proxy: ${proxyServer}`);
+
+        if (proxyUrl.username || proxyUrl.password) {
+            process.env.PROXY_USERNAME = decodeURIComponent(proxyUrl.username || '');
+            process.env.PROXY_PASSWORD = decodeURIComponent(proxyUrl.password || '');
+        }
     }
     const chrome = spawn(CHROME_PATH, args, {
         detached: true,
@@ -675,7 +669,7 @@ async function solveAltchaIfPresent(page, stageName = "Renew阶段", maxAttempts
     }
     if (!browser) process.exit(1);
 
-    const context = browser.contexts()[0];
+    // Browser traffic is routed through GOST SOCKS5 proxy configured in Chrome startup\n    const context = browser.contexts()[0];
     if (!context) {
         console.error('无法获取浏览器上下文，退出。');
         await browser.close();
