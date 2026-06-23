@@ -5,7 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
-const { SocksProxyAgent } = require('socks-proxy-agent');
 
 const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const TG_CHAT_ID = process.env.TG_CHAT_ID;
@@ -52,12 +51,12 @@ const VIEWPORT_HEIGHT = 720;
 const RENEW_MAX_ATTEMPTS = 3;
 process.env.NO_PROXY = 'localhost,127.0.0.1';
 
-const GOST_PROXY = process.env.GOST_PROXY;
+const HTTP_PROXY = process.env.HTTP_PROXY;
 let PROXY_CONFIG = null;
 
-if (GOST_PROXY) {
+if (HTTP_PROXY) {
     try {
-        const proxyUrl = new URL(GOST_PROXY);
+        const proxyUrl = new URL(HTTP_PROXY);
         PROXY_CONFIG = {
             server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
             username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
@@ -65,7 +64,7 @@ if (GOST_PROXY) {
         };
         console.log(`[代理] 检测到配置: 服务器=${PROXY_CONFIG.server}, 认证=${PROXY_CONFIG.username ? '是' : '否'}`);
     } catch (e) {
-        console.error('[代理] GOST_PROXY(SOCKS5) 格式无效。');
+        console.error('[代理] HTTP_PROXY 格式无效。');
         process.exit(1);
     }
 }
@@ -121,10 +120,9 @@ async function checkProxy() {
     if (!PROXY_CONFIG) return true;
     console.log('[代理] 正在验证代理连接...');
     try {
-        const agent = new SocksProxyAgent(GOST_PROXY);
         const axiosConfig = {
-            httpAgent: agent,
-            httpsAgent: agent,
+            proxy: {
+                protocol: 'http',
                 host: new URL(PROXY_CONFIG.server).hostname,
                 port: parseInt(new URL(PROXY_CONFIG.server).port, 10),
             },
