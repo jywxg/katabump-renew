@@ -1,6 +1,7 @@
 const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 const axios = require('axios');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -51,12 +52,12 @@ const VIEWPORT_HEIGHT = 720;
 const RENEW_MAX_ATTEMPTS = 3;
 process.env.NO_PROXY = 'localhost,127.0.0.1';
 
-const HTTP_PROXY = process.env.HTTP_PROXY;
+const PROXY_URL = process.env.HTTP_PROXY || process.env.SOCKS5_PROXY || process.env.PROXY_URL;
 let PROXY_CONFIG = null;
 
-if (HTTP_PROXY) {
+if (PROXY_URL) {
     try {
-        const proxyUrl = new URL(HTTP_PROXY);
+        const proxyUrl = new URL(PROXY_URL);
         PROXY_CONFIG = {
             server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
             username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
@@ -120,21 +121,29 @@ async function checkProxy() {
     if (!PROXY_CONFIG) return true;
     console.log('[代理] 正在验证代理连接...');
     try {
-        const axiosConfig = {
-            proxy: {
-                protocol: 'http',
-                host: new URL(PROXY_CONFIG.server).hostname,
-                port: parseInt(new URL(PROXY_CONFIG.server).port, 10),
-            },
-            timeout: 10000
-        };
-        if (PROXY_CONFIG.username && PROXY_CONFIG.password) {
-            axiosConfig.proxy.auth = {
-                username: PROXY_CONFIG.username,
-                password: PROXY_CONFIG.password
+        if (PROXY_CONFIG.server.startsWith('socks')) {
+            const agent = new SocksProxyAgent(PROXY_URL);
+            await axios.get('https://api.ip.sb/ip', {
+                httpsAgent: agent,
+                timeout: 15000
+            });
+        } else {
+            const axiosConfig = {
+                proxy: {
+                    protocol: 'http',
+                    host: new URL(PROXY_CONFIG.server).hostname,
+                    port: parseInt(new URL(PROXY_CONFIG.server).port, 10),
+                },
+                timeout: 15000
             };
+            if (PROXY_CONFIG.username && PROXY_CONFIG.password) {
+                axiosConfig.proxy.auth = {
+                    username: PROXY_CONFIG.username,
+                    password: PROXY_CONFIG.password
+                };
+            }
+            await axios.get('https://api.ip.sb/ip', axiosConfig);
         }
-        await axios.get('https://1.1.1.1', axiosConfig);
         console.log('[代理] 连接成功！');
         return true;
     } catch (error) {
