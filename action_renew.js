@@ -1,7 +1,6 @@
 const { chromium } = require('playwright-extra');
 const stealth = require('puppeteer-extra-plugin-stealth')();
 const axios = require('axios');
-const { SocksProxyAgent } = require('socks-proxy-agent');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -52,36 +51,12 @@ const VIEWPORT_HEIGHT = 720;
 const RENEW_MAX_ATTEMPTS = 3;
 process.env.NO_PROXY = 'localhost,127.0.0.1';
 
-const GOST_PROXY = process.env.GOST_PROXY;
+const HTTP_PROXY = process.env.HTTP_PROXY;
 let PROXY_CONFIG = null;
 
-function detectProxyConfig(proxyValue) {
-    if (!proxyValue) return null;
-
-    const value = String(proxyValue).trim();
-
-    if (value.startsWith('vmess://')) {
-        return { type: 'vmess', raw: value };
-    }
-    if (value.startsWith('vless://')) {
-        return { type: 'vless', raw: value };
-    }
-    if (value.startsWith('tuic://')) {
-        return { type: 'tuic', raw: value };
-    }
-
-    const proxyUrl = new URL(value);
-    return {
-        type: proxyUrl.protocol.replace(':', ''),
-        server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
-        username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
-        password: proxyUrl.password ? decodeURIComponent(proxyUrl.password) : undefined
-    };
-}
-
-if (GOST_PROXY) {
+if (HTTP_PROXY) {
     try {
-        PROXY_CONFIG = detectProxyConfig(GOST_PROXY);
+        const proxyUrl = new URL(HTTP_PROXY);
         PROXY_CONFIG = {
             server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
             username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
@@ -89,7 +64,7 @@ if (GOST_PROXY) {
         };
         console.log(`[代理] 检测到配置: 服务器=${PROXY_CONFIG.server}, 认证=${PROXY_CONFIG.username ? '是' : '否'}`);
     } catch (e) {
-        console.error('[代理] GOST_PROXY 格式无效。');
+        console.error('[代理] HTTP_PROXY 格式无效。');
         process.exit(1);
     }
 }
@@ -145,17 +120,21 @@ async function checkProxy() {
     if (!PROXY_CONFIG) return true;
     console.log('[代理] 正在验证代理连接...');
     try {
-        const agent = new SocksProxyAgent(
-            GOST_PROXY.startsWith('http://') || GOST_PROXY.startsWith('https://')
-                ? GOST_PROXY.replace(/^http/i,'socks5')
-                : GOST_PROXY
-        );
-        await axios.get('https://1.1.1.1', {
-            httpAgent: agent,
-            httpsAgent: agent,
-            proxy: false,
+        const axiosConfig = {
+            proxy: {
+                protocol: 'http',
+                host: new URL(PROXY_CONFIG.server).hostname,
+                port: parseInt(new URL(PROXY_CONFIG.server).port, 10),
+            },
             timeout: 10000
-        });
+        };
+        if (PROXY_CONFIG.username && PROXY_CONFIG.password) {
+            axiosConfig.proxy.auth = {
+                username: PROXY_CONFIG.username,
+                password: PROXY_CONFIG.password
+            };
+        }
+        await axios.get('https://1.1.1.1', axiosConfig);
         console.log('[代理] 连接成功！');
         return true;
     } catch (error) {
@@ -196,19 +175,9 @@ async function launchChrome() {
         '--user-data-dir=/tmp/chrome_user_data',
         '--disable-dev-shm-usage'
     ];
-    if (process.env.GOST_PROXY) {
-        const proxyUrl = new URL(process.env.GOST_PROXY);
-        const proxyServer = `${proxyUrl.protocol.replace(':','')}://${proxyUrl.hostname}:${proxyUrl.port}`;
-
-        args.push(`--proxy-server=${proxyServer}`);
+    if (PROXY_CONFIG) {
+        args.push(`--proxy-server=${PROXY_CONFIG.server}`);
         args.push('--proxy-bypass-list=<-loopback>');
-
-        console.log(`[Chrome] Using proxy: ${proxyServer}`);
-
-        if (proxyUrl.username || proxyUrl.password) {
-            process.env.PROXY_USERNAME = decodeURIComponent(proxyUrl.username || '');
-            process.env.PROXY_PASSWORD = decodeURIComponent(proxyUrl.password || '');
-        }
     }
     const chrome = spawn(CHROME_PATH, args, {
         detached: true,
@@ -697,7 +666,7 @@ async function solveAltchaIfPresent(page, stageName = "Renew阶段", maxAttempts
     }
     if (!browser) process.exit(1);
 
-    // Browser traffic is routed through GOST SOCKS5 proxy configured in Chrome startup\n    const context = browser.contexts()[0];
+    const context = browser.contexts()[0];
     if (!context) {
         console.error('无法获取浏览器上下文，退出。');
         await browser.close();
