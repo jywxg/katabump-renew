@@ -35,6 +35,7 @@ jobs:
         env:
           USERS_JSON: ${{ secrets.USERS_JSON }}
           HTTP_PROXY: ${{ secrets.HTTP_PROXY }}
+          SOCKS5_PROXY: ${{ secrets.SOCKS5_PROXY }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" node action_renew.js
