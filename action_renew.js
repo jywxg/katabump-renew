@@ -52,12 +52,36 @@ const VIEWPORT_HEIGHT = 720;
 const RENEW_MAX_ATTEMPTS = 3;
 process.env.NO_PROXY = 'localhost,127.0.0.1';
 
-const SOCKS5_PROXY = process.env.SOCKS5_PROXY;
+const GOST_PROXY = process.env.GOST_PROXY;
 let PROXY_CONFIG = null;
 
-if (SOCKS5_PROXY) {
+function detectProxyConfig(proxyValue) {
+    if (!proxyValue) return null;
+
+    const value = String(proxyValue).trim();
+
+    if (value.startsWith('vmess://')) {
+        return { type: 'vmess', raw: value };
+    }
+    if (value.startsWith('vless://')) {
+        return { type: 'vless', raw: value };
+    }
+    if (value.startsWith('tuic://')) {
+        return { type: 'tuic', raw: value };
+    }
+
+    const proxyUrl = new URL(value);
+    return {
+        type: proxyUrl.protocol.replace(':', ''),
+        server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
+        username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
+        password: proxyUrl.password ? decodeURIComponent(proxyUrl.password) : undefined
+    };
+}
+
+if (GOST_PROXY) {
     try {
-        const proxyUrl = new URL(SOCKS5_PROXY);
+        PROXY_CONFIG = detectProxyConfig(GOST_PROXY);
         PROXY_CONFIG = {
             server: `${proxyUrl.protocol}//${proxyUrl.hostname}:${proxyUrl.port}`,
             username: proxyUrl.username ? decodeURIComponent(proxyUrl.username) : undefined,
@@ -65,7 +89,7 @@ if (SOCKS5_PROXY) {
         };
         console.log(`[代理] 检测到配置: 服务器=${PROXY_CONFIG.server}, 认证=${PROXY_CONFIG.username ? '是' : '否'}`);
     } catch (e) {
-        console.error('[代理] SOCKS5_PROXY 格式无效。');
+        console.error('[代理] GOST_PROXY 格式无效。');
         process.exit(1);
     }
 }
@@ -121,7 +145,11 @@ async function checkProxy() {
     if (!PROXY_CONFIG) return true;
     console.log('[代理] 正在验证代理连接...');
     try {
-        const agent = new SocksProxyAgent(SOCKS5_PROXY);
+        const agent = new SocksProxyAgent(
+            GOST_PROXY.startsWith('http://') || GOST_PROXY.startsWith('https://')
+                ? GOST_PROXY.replace(/^http/i,'socks5')
+                : GOST_PROXY
+        );
         await axios.get('https://1.1.1.1', {
             httpAgent: agent,
             httpsAgent: agent,
@@ -168,8 +196,8 @@ async function launchChrome() {
         '--user-data-dir=/tmp/chrome_user_data',
         '--disable-dev-shm-usage'
     ];
-    if (process.env.SOCKS5_PROXY) {
-        const proxyUrl = new URL(process.env.SOCKS5_PROXY);
+    if (process.env.GOST_PROXY) {
+        const proxyUrl = new URL(process.env.GOST_PROXY);
         const proxyServer = `${proxyUrl.protocol.replace(':','')}://${proxyUrl.hostname}:${proxyUrl.port}`;
 
         args.push(`--proxy-server=${proxyServer}`);
