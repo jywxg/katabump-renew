@@ -34,7 +34,7 @@ jobs:
       - name: Run Renew Script
         env:
           USERS_JSON: ${{ secrets.USERS_JSON }}
-          GOST_PROXY: ${{ secrets.GOST_PROXY }}
+          HTTP_PROXY: ${{ secrets.HTTP_PROXY }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" node action_renew.js
